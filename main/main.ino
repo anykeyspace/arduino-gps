@@ -1,19 +1,15 @@
-#include <SoftwareSerial.h>
-//начало вставки кода №1
-#include <Wire.h> 
-#include <LiquidCrystal_I2C.h>
-//конец вставки кода №1
-#include <TinyGPS.h>
+#include <NMEAGPS.h>
 
 #include <math.h>
 
-/* This sample code demonstrates the normal use of a TinyGPS object.
-   It requires the use of SoftwareSerial, and assumes that you have a
-   4800-baud serial GPS device hooked up on pins 4(rx) and 3(tx).
-*/
+#define gpsPort Serial1
 
-TinyGPS gps;
-SoftwareSerial ss(4, 3);
+#define TONEpin 3 // Пин, к которому подключен пьезодинамик
+
+const int toneFreq = 4000; 
+
+NMEAGPS gps;
+gps_fix fix;
 
 struct anshlagPoint
 {
@@ -21,60 +17,28 @@ struct anshlagPoint
   float lon;
 };
 
-static void smartdelay(unsigned long ms);
-static void print_float(float val, float invalid, int len, int prec);
-static void print_int(unsigned long val, unsigned long invalid, int len);
-static void print_date(TinyGPS &gps);
-static void print_str(const char *str, int len);
-//начало вставки кода №2
-LiquidCrystal_I2C lcd(0x27, 20, 4);
-//конец вставки кода №2
 void setup()
 {
-  Serial.begin(9600);
-  
-  Serial.print("Testing TinyGPS library v. "); Serial.println(TinyGPS::library_version());
-  Serial.println("by Mikal Hart");
-  Serial.println();
-  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Distance Course Card  Chars Sentences Checksum   Distance  ");
-  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----  ---- to London  ----  RX    RX        Fail       (m)");
-  Serial.println("-------------------------------------------------------------------------------------------------------------------------------------------------");
-
-  ss.begin(9600);
-  
- //начало вставки кода №3
-  lcd.begin();
-lcd.backlight();
-//конец вставки кода №3
+  pinMode(TONEpin, OUTPUT);
+  Serial.begin( 9600 );
+  gpsPort.begin( 9600 );
 }
 
 void loop()
 {
-  float flat, flon;
-  unsigned long age, date, time, chars = 0;
-  unsigned short sentences = 0, failed = 0;
-  static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
+  if (gps.available( gpsPort )) {
+    fix = gps.read();
 
-  print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
-  print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
-  gps.f_get_position(&flat, &flon, &age);
-  print_float(flat, TinyGPS::GPS_INVALID_F_ANGLE, 10, 6);
-  print_float(flon, TinyGPS::GPS_INVALID_F_ANGLE, 11, 6);
-  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
-  print_date(gps);
-  print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 7, 2);
-  print_float(gps.f_course(), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
-  print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
-  print_str(gps.f_course() == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(gps.f_course()), 6);
-  print_int(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0xFFFFFFFF : (unsigned long)TinyGPS::distance_between(flat, flon, LONDON_LAT, LONDON_LON) / 1000, 0xFFFFFFFF, 9);
-  print_float(flat == TinyGPS::GPS_INVALID_F_ANGLE ? TinyGPS::GPS_INVALID_F_ANGLE : TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
-  print_str(flat == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON)), 6);
+    Serial.println( fix.latitude(), 6 ); 
+    Serial.println( fix.longitude(), 6 );
 
-  gps.stats(&chars, &sentences, &failed);
-  print_int(chars, 0xFFFFFFFF, 6);
-  print_int(sentences, 0xFFFFFFFF, 10);
-  print_int(failed, 0xFFFFFFFF, 9);
-  Serial.println();
+    action();
+  }
+}
+
+void action() {
+  float flat = fix.location.latF();
+  float flon = fix.location.lonF();
   
   // Проверяемые точки. Широта и долгота в градусах. Порядок не имеет значения
   int pointsNumber = 4; // количество точек
@@ -87,9 +51,6 @@ void loop()
   // Радиус зоны обнаружения в метрах
   float distance = 10;
 
-  //Пин, к которому подключен пьезодинамик.
-  int piezoPin = 2;
-
   //Проверка
   int result = 0;
   for (int i = 0; i < pointsNumber; ++i) {
@@ -101,15 +62,10 @@ void loop()
 
   // Обработка результата
   if (result) {
-      // Тут код включения сигнала тревоги:
-    tone(piezoPin, 2000); // Запустили звучание
-  } else {
-    // Тут код выключения сигнала тревоги:
-    noTone(piezoPin); // Остановили звучание
+    beep4(); // Звуковой сигнал, если попали в зону срабатывания
   }
-  
-  smartdelay(1000);
 }
+
 
 // 
 static int magic_method(float gpsFlat, float gpsFlon, float pointLat, float pointLon, float distance)
@@ -145,88 +101,49 @@ static float calculate(float gpsFlat, float gpsFlon, float pointLat, float point
     return R * acos(sin(rGpsFlat) * sin(rPointLat) + cos(rGpsFlat) * cos(rPointLat) * cos(rGpsFlon - rPointLon));
 }
 
-static void smartdelay(unsigned long ms)
-{
-  unsigned long start = millis();
-  do 
-  {
-    while (ss.available())
-      gps.encode(ss.read());
-  } while (millis() - start < ms);
-}
+// https://forum.arduino.cc/t/arduino-due-and-tone/133302/13
 
-static void print_float(float val, float invalid, int len, int prec)
-{
-  if (val == invalid)
-  {
-    while (len-- > 1)
-      Serial.print('*');
-    Serial.print(' ');
+void beep()  {tone(50);}
+void beep2() {beep(); delay(150); beep();}
+void beep3() {beep(); delay(150); beep(); delay(150); beep();}
+void beep4() {beep(); delay(150); beep(); delay(150); beep(); delay(150); beep();}
+
+volatile static int32_t toggles;                    // number of ups/downs in a tone burst 
+
+void tone(int32_t duration){                        // duration in ms
+  const uint32_t rcVal = VARIANT_MCK/256/toneFreq;  // target value for counter, before it resets (= 82 for 4kHz)
+  toggles = 2*toneFreq*duration/1000;               // calculate no of waveform edges (rises/falls) for the tone burst
+  setupTC(TC1,0,TC3_IRQn,toneFreq);                 // Start Timer/Counter 1, channel 0, interrupt, frequency
   }
-  else
-  {
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
-      Serial.print(' ');
+  
+void setupTC(Tc *tc, uint32_t channel, IRQn_Type irq, uint32_t freq){
+  pmc_set_writeprotect(false);                       // disable write protection of timer registers
+  pmc_enable_periph_clk((uint32_t) irq);             // enable clock / interrupt 
+//pmc_enable_periph_clk((uint32_t) ID_TC3);          // alternate syntax, using PMC_id instead
+  TC_Configure(tc, channel,            
+               TC_CMR_TCCLKS_TIMER_CLOCK4 |          // TIMER_CLOCK4: MCK/128=656,250Hz. 16 bits so 656,250/65,536=~10Hz/bit
+               TC_CMR_WAVE |                         // Waveform mode
+               TC_CMR_WAVSEL_UP_RC );                // Counter running up and reset when = Register C value (rcVal)
+  const uint32_t rcVal = VARIANT_MCK/256/freq;       // target value for counter, before it resets
+//Serial << "rcVal: " << rcVal << " toggles: " << toggles << '\n'; 
+//TC_SetRA(tc, channel, rcVal/2);                    // could also use Register A for 50% duty cycle square wave
+  TC_SetRC(tc, channel, rcVal);
+  TC_Start(tc, channel);
+  (*tc).TC_CHANNEL[channel].TC_IER =  TC_IER_CPCS;   // IER: CPCS bit enables RC compare interrupt when set 
+  (*tc).TC_CHANNEL[channel].TC_IDR = ~TC_IER_CPCS;   // IDR: clear CPCS bit = don't disable RC compare interrupt
+  NVIC_EnableIRQ(irq);                               // Enable TC3_IRQn in the Nested Vector Interrupt Controller)
   }
-  smartdelay(0);
-}
 
-static void print_float_debug(float val)
-{
-    int len = 15;
-    int prec = 10;
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
-      Serial.print(' ');
-  smartdelay(0);
-}
-
-static void print_int(unsigned long val, unsigned long invalid, int len)
-{
-  char sz[32];
-  if (val == invalid)
-    strcpy(sz, "*******");
-  else
-    sprintf(sz, "%ld", val);
-  sz[len] = 0;
-  for (int i=strlen(sz); i<len; ++i)
-    sz[i] = ' ';
-  if (len > 0) 
-    sz[len-1] = ' ';
-  Serial.print(sz);
-  smartdelay(0);
-}
-
-static void print_date(TinyGPS &gps)
-{
-  int year;
-  byte month, day, hour, minute, second, hundredths;
-  unsigned long age;
-  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-  if (age == TinyGPS::GPS_INVALID_AGE)
-    Serial.print("********** ******** ");
-  else
-  {
-    char sz[32];
-    sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
-        month, day, year, hour, minute, second);
-    Serial.print(sz);
+void TC3_Handler(void){                              // timer ISR  TC1 ch 0
+  TC_GetStatus(TC1,0);
+  if (toggles != 0){
+    digitalWrite(TONEpin,!digitalRead(TONEpin));     // invert the pin state (i.e toggle)
+    if (toggles > 0) toggles--;
+    } 
+  //else noTone();                                   // seems superfluous ?
   }
-  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
-  smartdelay(0);
-}
-
-static void print_str(const char *str, int len)
-{
-  int slen = strlen(str);
-  for (int i=0; i<len; ++i)
-    Serial.print(i<slen ? str[i] : ' ');
-  smartdelay(0);
-}
+/*
+void noTone(){
+  TC_Stop(tc,channel);                               // stop timer
+  digitalWrite(TONEpin,LOW);                         // no signal on pin
+  }*/
