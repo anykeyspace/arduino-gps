@@ -21,6 +21,14 @@ void setup()
 {
   pinMode(TONEpin, OUTPUT);
   Serial.begin( 9600 );
+
+  Serial.println("\n==== Tone example ====\n");
+  beep();  delay(1000);
+  beep2(); delay(1000);
+  beep3(); delay(1000);
+  beep4();
+  Serial.println("End of tone example...\n");
+  
   gpsPort.begin( 9600 );
 }
 
