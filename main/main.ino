@@ -2,9 +2,9 @@
 
 #include <math.h>
 
-#define gpsPort Serial1
+#define gpsPort Serial3
 
-#define TONEpin 3 // Пин, к которому подключен пьезодинамик
+#define TONEpin 2 // Пин, к которому подключен пьезодинамик
 
 const int toneFreq = 4000; 
 
@@ -62,7 +62,7 @@ void action() {
   //Проверка
   int result = 0;
   for (int i = 0; i < pointsNumber; ++i) {
-    if (magic_method(flat, flon, points[i].lat, points[i].lon, distance)) {
+    if (checkPoint(flat, flon, points[i].lat, points[i].lon, distance)) {
       result = 1;
       break;
     }
@@ -89,6 +89,15 @@ static int magic_method(float gpsFlat, float gpsFlon, float pointLat, float poin
           return 0;
         }
     }
+
+static int checkPoint(float gpsFlat, float gpsFlon, float pointLat, float pointLon, float alertDistance)
+{
+  float distance = calculate(gpsFlat, gpsFlon, pointLat, pointLon);
+  if (fabs(distance) < alertDistance) {
+    return 1;
+  }
+  return 0;
+}
 
 // тестовая функция
 // gpsFlat, gpsFlon - текущая широта, долгота с датчика
