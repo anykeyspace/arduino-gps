@@ -4,7 +4,11 @@
 
 #define gpsPort Serial3
 
+#define gsmPort Serial2
+
 #define TONEpin 2 // Пин, к которому подключен пьезодинамик
+
+#define PHONE "+ZZxxxxxxxxxx"
 
 const int toneFreq = 4000; 
 
@@ -30,6 +34,40 @@ void setup()
   Serial.println("End of tone example...\n");
   
   gpsPort.begin( 9600 );
+  gsmPort.begin( 9600 );
+  delay(1000);
+
+  Serial.println("\n==== Sending test sms ====\n");
+  sendTestSms();
+  Serial.println("\n==== Sending completed ====\n");
+}
+
+void sendTestSms() {
+  gsmPort.println("AT");
+  updateSerial();
+
+  gsmPort.println("AT+CMGF=1"); // Configuring TEXT mode
+  updateSerial();
+  gsmPort.print("AT+CMGS=\"");
+  gsmPort.print(PHONE);
+  gsmPort.print("\"");
+  updateSerial();
+  gsmPort.print("Arduino test sms"); //text content
+  updateSerial();
+  gsmPort.write(26);
+}
+
+void updateSerial()
+{
+  delay(500);
+  while (Serial.available()) 
+  {
+    gsmPort.write(Serial.read());//Forward what Serial received to gsmPort
+  }
+  while(gsmPort.available()) 
+  {
+    Serial.write(gsmPort.read());//Forward what gsmPort received to Serial Port
+  }
 }
 
 void loop()
