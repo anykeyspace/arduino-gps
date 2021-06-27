@@ -8,9 +8,13 @@
 
 #define TONEpin 2 // Пин, к которому подключен пьезодинамик
 
+#define LEDpin 13 // Пин, к которому подключен светодиод
+
 #define PHONE "+ZZxxxxxxxxxx"
 
 const int toneFreq = 4000; 
+
+int isSmsSent = 0;
 
 NMEAGPS gps;
 gps_fix fix;
@@ -24,33 +28,45 @@ struct anshlagPoint
 void setup()
 {
   pinMode(TONEpin, OUTPUT);
+  pinMode(LEDpin, OUTPUT);
   Serial.begin( 9600 );
 
+  turnLedOn();
   Serial.println("\n==== Tone example ====\n");
   beep();  delay(1000);
   beep2(); delay(1000);
   beep3(); delay(1000);
   beep4();
   Serial.println("End of tone example...\n");
+  turnLedOff();
   
   gpsPort.begin( 9600 );
   gsmPort.begin( 9600 );
   delay(1000);
 
-  Serial.println("\n==== Sending test sms ====\n");
-  sendTestSms();
-  Serial.println("\n==== Sending completed ====\n");
+  Serial.println("\n==== Test GSM ====\n");
+  testGsm();
+  Serial.println("\n==== GSM test complete ====\n");
 }
 
-void sendTestSms() {
+void testGsm() {
   gsmPort.println("AT");
+  updateSerial();
+  
+  gsmPort.println("AT+CSQ");
+  updateSerial();
+  
+  gsmPort.println("AT+CCID");
+  updateSerial();
+  
+  gsmPort.println("AT+CREG?");
   updateSerial();
 
   gsmPort.println("AT+CMGF=1"); // Configuring TEXT mode
   updateSerial();
   gsmPort.print("AT+CMGS=\"");
   gsmPort.print(PHONE);
-  gsmPort.print("\"");
+  gsmPort.println("\"");
   updateSerial();
   gsmPort.print("Arduino test sms"); //text content
   updateSerial();
@@ -72,13 +88,28 @@ void updateSerial()
 
 void loop()
 {
+  updateSerial();
   if (gps.available( gpsPort )) {
+
     fix = gps.read();
+
+    checkGps();
 
     Serial.println( fix.latitude(), 6 ); 
     Serial.println( fix.longitude(), 6 );
 
     action();
+  } else {
+    turnLedOff();
+  }
+}
+
+void checkGps() {
+  float flat = fix.location.latF();
+  if (flat > 5) {
+    turnLedOn();
+  } {
+    turnLedOff();
   }
 }
 
@@ -109,9 +140,37 @@ void action() {
   // Обработка результата
   if (result) {
     beep4(); // Звуковой сигнал, если попали в зону срабатывания
+    if (isSmsSent == 0) {
+      sendSms(flat, flon);
+      isSmsSent = 1;
+    }
+  } else {
+    isSmsSent = 0;
   }
 }
 
+void sendSms(float flat, float flon) {
+  gsmPort.println("AT+CMGF=1"); // Configuring TEXT mode
+  updateSerial();
+  gsmPort.print("AT+CMGS=\"");
+  gsmPort.print(PHONE);
+  gsmPort.println("\"");
+  updateSerial();
+  gsmPort.print("Alert! Lat: ");
+  gsmPort.print(flat);
+  gsmPort.print("Lon: ");
+  gsmPort.print(flon);
+  updateSerial();
+  gsmPort.write(26);
+}
+
+void turnLedOn() {
+  digitalWrite(LEDpin, HIGH);
+}
+
+void turnLedOff() {
+  digitalWrite(LEDpin, LOW);
+}
 
 // 
 static int magic_method(float gpsFlat, float gpsFlon, float pointLat, float pointLon, float distance)
