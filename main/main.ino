@@ -2,13 +2,14 @@
 
 #include <math.h>
 
-#define gpsPort Serial3
+#define gpsPort Serial1
 
 #define gsmPort Serial2
 
 #define TONEpin 2 // Пин, к которому подключен пьезодинамик
 
-#define LEDpin 13 // Пин, к которому подключен светодиод
+#define ALERT_LEDpin 12 // Пин, к которому подключен светодиод охранной зоны
+#define LEDpin 13 // Пин, к которому подключен светодиод GPS
 
 #define PHONE "+ZZxxxxxxxxxx"
 
@@ -31,14 +32,14 @@ void setup()
   pinMode(LEDpin, OUTPUT);
   Serial.begin( 9600 );
 
-  turnLedOn();
+  turnGpsLedOn();
   Serial.println("\n==== Tone example ====\n");
-  beep();  delay(1000);
-  beep2(); delay(1000);
-  beep3(); delay(1000);
-  beep4();
+   beep();  delay(1000);
+   beep2(); delay(1000);
+   beep3(); delay(1000);
+   beep4();
   Serial.println("End of tone example...\n");
-  turnLedOff();
+  turnGpsLedOff();
   
   gpsPort.begin( 9600 );
   gsmPort.begin( 9600 );
@@ -62,7 +63,7 @@ void testGsm() {
   gsmPort.println("AT+CREG?");
   updateSerial();
 
-  gsmPort.println("AT+CMGF=1"); // Configuring TEXT mode
+  /*gsmPort.println("AT+CMGF=1"); // Configuring TEXT mode
   updateSerial();
   gsmPort.print("AT+CMGS=\"");
   gsmPort.print(PHONE);
@@ -70,7 +71,7 @@ void testGsm() {
   updateSerial();
   gsmPort.print("Arduino test sms"); //text content
   updateSerial();
-  gsmPort.write(26);
+  gsmPort.write(26);*/
 }
 
 void updateSerial()
@@ -88,7 +89,7 @@ void updateSerial()
 
 void loop()
 {
-  updateSerial();
+  //updateSerial();
   if (gps.available( gpsPort )) {
 
     fix = gps.read();
@@ -100,16 +101,16 @@ void loop()
 
     action();
   } else {
-    turnLedOff();
+    //turnGpsLedOff();
   }
 }
 
 void checkGps() {
   float flat = fix.location.latF();
   if (flat > 5) {
-    turnLedOn();
-  } {
-    turnLedOff();
+    turnGpsLedOn();
+  } else {
+    turnGpsLedOff();
   }
 }
 
@@ -140,11 +141,13 @@ void action() {
   // Обработка результата
   if (result) {
     beep4(); // Звуковой сигнал, если попали в зону срабатывания
+    turnAlertLedOn();
     if (isSmsSent == 0) {
       sendSms(flat, flon);
       isSmsSent = 1;
     }
   } else {
+    turnAlertLedOff();
     isSmsSent = 0;
   }
 }
@@ -164,12 +167,20 @@ void sendSms(float flat, float flon) {
   gsmPort.write(26);
 }
 
-void turnLedOn() {
+void turnGpsLedOn() {
   digitalWrite(LEDpin, HIGH);
 }
 
-void turnLedOff() {
+void turnGpsLedOff() {
   digitalWrite(LEDpin, LOW);
+}
+
+void turnAlertLedOn() {
+  digitalWrite(ALERT_LEDpin, HIGH);
+}
+
+void turnAlertLedOff() {
+  digitalWrite(ALERT_LEDpin, LOW);
 }
 
 // 
